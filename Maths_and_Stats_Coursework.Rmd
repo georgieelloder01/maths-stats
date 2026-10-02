@@ -1,0 +1,404 @@
+---
+title: "Maths and Stats Coursework"
+author: "Georgina Adams"
+date: "07/11/25"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Question 1: Simulating a Board Game
+
+The original `play_mc()` function contained a bug in its end-of-game check:
+it set `pos` to 70 (ending the game) whenever the position was **below** 70,
+rather than when it reached or exceeded 70. The corrected version below fixes
+this logic and extends the game with slippery squares (which slide the
+player back) and climbing squares (which move the player forward).
+
+```{r}
+# Load libraries
+source("Functions_for_CW.R")
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+# Original (buggy) version of the game function:
+# this immediately assigns pos as 70 if pos is currently below 70,
+# ending the game far too early.
+play_mc <- function(start_pos = 0) {
+  die <- sample.int(6, 1)
+  pos <- start_pos
+  pos <- pos + die
+
+  if (pos < 70) {
+    pos <- 70
+    return(pos)
+  }
+}
+
+# Corrected and extended version:
+play_mc <- function(start_pos = 0, slippery_squares = c(9, 18, 27, 36, 45, 54, 63), climbing_squares = c(16, 32, 48, 64)) {
+  die <- sample.int(6, 1)
+  pos <- start_pos
+  pos <- pos + die
+
+  # Game now correctly ends once the score reaches or exceeds 70.
+  if (pos >= 70) {
+    pos <- 70
+    return(pos)
+  }
+
+  # If the player lands on a slippery square, they slide back 1-3 places
+  # (never below 0).
+  if (pos %in% slippery_squares) {
+    slide <- sample(1:3, 1)
+    pos <- max(0, pos - slide)
+  }
+
+  # If the player lands on a climbing square, they move forward 5 places
+  # (never above 70).
+  else if (pos %in% climbing_squares) {
+    pos <- min(70, pos + 5)
+  }
+
+  return(pos)
+}
+
+play_mc()
+```
+
+# Question 2: Simulating Full Games
+
+```{r}
+play_mc_full()
+```
+
+# Question 3: Distribution of Turns to Finish
+
+```{r}
+results_sc <- simulate_climbs()
+
+my_hist <- hist(results_sc$turns_vector,
+     main = "Histogram showing the frequency of turns taken to finish each game",
+     xlab = "Number of turns",
+     ylab = "Frequency")
+```
+
+# Question 4: Position After a Fixed Number of Turns
+
+```{r}
+results_sp <- simulate_pos_at()
+
+n_turn_hist <- hist(results_sp$positions_at_n_turns,
+     main = "Histogram showing positions at 10 turns taken",
+     xlab = "Position at 10 turns",
+     ylab = "Frequency")
+
+# Re-run with an updated slip-back range and climb-up amount
+results_sp_new_values <- simulate_pos_at(slip_back_range = 4:8, climb_up_amount = 2)
+
+new_values_hist <- hist(results_sp_new_values$positions_at_n_turns,
+     main = "Histogram showing positions at 10 turns with updated values",
+     xlab = "Position at 10 turns",
+     ylab = "Frequency")
+
+print(results_sp$turns_stats)
+print(results_sp_new_values$turns_stats)
+```
+
+For the first simulation we have a mean position of around 32 at 10 turns,
+whereas after changing the values and re-running the simulations with the
+updated slip-back range and climb-up amount, we have a mean position of
+around 27. This is expected based on the changes, as the position slips
+back further and climbs up less when landing on slippery and climbing
+squares. This shift is demonstrated in the histograms shown above.
+
+# Question 5: BMI, Density Curves, and PCA
+
+```{r}
+# The data file is not located in a directory called "data", so the
+# originally-supplied load() path did not work; corrected below.
+load("assess_data_1225.Rdata")
+
+dens_m <- density(bmi_data$bmi[bmi_data$sex == "male"])
+dens_f <- density(bmi_data$bmi[bmi_data$sex == "female"])
+
+plot(dens_f, col = "green", main = "BMI Density Plot of Male and Female Participants", xlab = "BMI", ylab = "Density")
+lines(dens_m)
+legend("topright", c("Female", "Male"), col = c("green", "black"), lty = 1)
+
+idx <- 1:200
+
+# Runs PCA on a subset of the data (columns 1 and 9 removed).
+pca_res <- prcomp(bmi_data[idx, -c(1, 9)], center = TRUE, scale = TRUE)
+
+colours <- ifelse(bmi_data$sex == "male", "blue", "pink")
+
+plot(pca_res$x[, 1], pca_res$x[, 2], col = colours, pch = 19, main = "Principal Component Analysis of BMI data subset", xlab = "Principle component 1", ylab = "Principle component 2")
+
+# The originally-supplied model did not reference the data frame correctly;
+# corrected below.
+out <- lm(bmi_data$bmi[idx] ~ bmi_data$age[idx])
+summary(out)
+
+p_val <- summary(out)$coefficients[2, 4]
+p_val
+```
+
+# Question 6: Data Quality and BMI Correction
+
+```{r}
+# Summary of mean BMI values by sex. Both averages are far beyond the
+# normal range, indicating implausible values and quality issues in the
+# dataset as supplied.
+aggregate(bmi ~ sex, data = bmi_data, mean)
+summary(bmi_data$bmi)
+```
+
+```{r}
+ggplot(bmi_data, aes(x = bmi)) +
+  geom_histogram(fill = "darkblue", color = "black") +
+  geom_vline(xintercept = c(20, 30), linetype = "dashed", color = "black") +
+  labs(title = "BMI Distribution of Participants", x = "BMI", y = "Count")
+```
+
+The distribution is severely skewed, suggesting extreme values are pulling
+it to one side and outside of normal ranges. Dashed lines mark where
+normal BMI values should fall.
+
+```{r}
+# Recalculates true BMI as weight (kg) divided by height (m) squared,
+# and adds it as a new column.
+library(dplyr)
+bmi_data <- bmi_data %>%
+  mutate(Correct_bmi = weight / ((height / 100)^2))
+
+ggplot(bmi_data, aes(x = Correct_bmi)) +
+  geom_histogram(fill = "darkblue", color = "black") +
+  geom_vline(xintercept = c(20, 30), linetype = "dashed", color = "black") +
+  labs(title = "Distribution of Corrected BMI", x = "True BMI of Male and Female Participants", y = "Number of Participants")
+
+ggplot(bmi_data, aes(sex, Correct_bmi, fill = sex)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c(female = "pink", male = "blue")) +
+  geom_hline(yintercept = c(20, 30), linetype = "dashed") +
+  labs(title = "Boxplot of Corrected BMI", y = "True BMI", x = "Sex")
+```
+
+After correction, the histogram peak now falls within the dashed lines
+showing the expected range. The boxplot shows males with a slightly higher
+median BMI than females, which is physiologically normal and still within
+the expected range.
+
+```{r}
+aggregate(Correct_bmi ~ sex, data = bmi_data, mean)
+summary(bmi_data$Correct_bmi)
+```
+
+Mean corrected BMI is now within the normal range, but minimum/maximum
+values remain abnormal and will require further quality control, including
+removal of NAs.
+
+```{r}
+# PCA plot to visualise outliers using clean numerical data.
+pca_input <- bmi_data[, -c(1, 9)]
+pca_input <- pca_input[sapply(pca_input, is.numeric)]
+
+pca_input <- data.frame(lapply(pca_input, function(x) replace(x, !is.finite(x), NA)))
+pca_input <- na.omit(pca_input)
+
+p <- prcomp(scale(pca_input))
+pc_dataframe <- as.data.frame(p$x)
+var_explained <- round(100 * p$sdev^2 / sum(p$sdev^2), 1)
+
+# Outliers computed using Tukey's rule: a fence is set outside Q1 and Q3
+# for each of the first two principal components.
+Q1_PC1 <- quantile(pc_dataframe$PC1, 0.25)
+Q3_PC1 <- quantile(pc_dataframe$PC1, 0.75)
+IQR_PC1 <- Q3_PC1 - Q1_PC1
+lower_PC1 <- Q1_PC1 - 1.5 * IQR_PC1
+upper_PC1 <- Q3_PC1 + 1.5 * IQR_PC1
+
+Q1_PC2 <- quantile(pc_dataframe$PC2, 0.25)
+Q3_PC2 <- quantile(pc_dataframe$PC2, 0.75)
+IQR_PC2 <- Q3_PC2 - Q1_PC2
+lower_PC2 <- Q1_PC2 - 1.5 * IQR_PC2
+upper_PC2 <- Q3_PC2 + 1.5 * IQR_PC2
+
+outliers <- (pc_dataframe$PC1 < lower_PC1 | pc_dataframe$PC1 > upper_PC1) |
+            (pc_dataframe$PC2 < lower_PC2 | pc_dataframe$PC2 > upper_PC2)
+
+colours <- ifelse(bmi_data$sex == "male", "blue", "pink")
+
+plot(pc_dataframe$PC1, pc_dataframe$PC2,
+     pch = 19, cex = 0.3,
+     col = colours,
+     xlab = paste0("PC1 (", var_explained[1], "%)"),
+     ylab = paste0("PC2 (", var_explained[2], "%)"),
+     main = "PCA of BMI Data with Outliers Highlighted")
+
+points(pc_dataframe$PC1[outliers], pc_dataframe$PC2[outliers],
+       col = "red",
+       pch = 19,
+       cex = 0.5)
+
+legend("topright", legend = c("Male", "Female", "Outlier"),
+      col = c("blue", "pink", "red"), pch = 19)
+```
+
+The PCA plot shows two clear clusters corresponding to male and female
+participants. Red points mark extreme values that remain in the dataset.
+PC1 explains 55.6% of the variance across all numeric variables, and a
+further 26.8% is explained by PC2 — together 84.4% of the variance, which
+is enough for the trends and clusters to be shown reliably in two
+dimensions.
+
+```{r}
+# Final cleaned dataset: NAs and outliers removed, implausible min/max
+# values resolved. This also replaces the original bmi column.
+cleaned_bmi_data <- update_bmi(bmi_data)
+summary(cleaned_bmi_data)
+```
+
+# Question 7: Predicting Body Fat from BMI
+
+Using simple linear regression to check how well BMI (covariate) can
+predict body fat (response), checking model assumptions and plotting the
+residuals.
+
+```{r}
+library(ggplot2)
+library(reshape2)
+library(bbmle)
+
+lm_model <- lm(body_fat ~ Correct_bmi, data = cleaned_bmi_data)
+summary(lm_model)
+
+plot(lm_model)
+```
+
+The Residuals vs Fitted plot shows residuals scattered around 0, meaning
+the linearity assumption is reasonably met, although funnelling toward
+the right indicates heteroscedasticity (non-constant variance), and the
+plot highlights some outliers. Variance also increases as fitted values
+increase. The R² value of 0.2956 shows that BMI alone explains only 29.6%
+of the variation in body fat — this is not a strong model on its own.
+
+The Q-Q plot, used to check distributional assumptions, shows both tails
+deviating from the theoretical distribution: a heavy tail indicating more
+extreme residuals than expected under normality, and a light tail
+indicating fewer extreme residuals than expected. This is most likely
+influenced by outliers and by other covariates not yet accounted for.
+
+```{r}
+lr_plot <- ggplot(cleaned_bmi_data, aes(x = Correct_bmi, y = body_fat)) +
+  geom_point() +
+  geom_smooth(method = "lm", colour = "blue") +
+  labs(
+    title = "Simple Linear Regression model: Body Fat vs BMI",
+    x = "Predictor: BMI",
+    y = "Response: Body Fat")
+
+print(lr_plot)
+```
+
+This plot shows the regression line fitted to BMI vs body fat. There is a
+clear linear association between the predictor and response, although BMI
+alone is not a reliable predictor of body fat on its own.
+
+```{r}
+residuals_df1 <- data.frame(resid = residuals(lm_model))
+
+ggplot(residuals_df1, aes(x = resid)) +
+  geom_histogram(aes(y = ..density..),
+                 bins = 30,
+                 fill = "darkblue",
+                 color = "black") +
+  stat_function(fun = dnorm,
+                args = list(mean = mean(residuals_df1$resid, na.rm = TRUE),
+                            sd = sd(residuals_df1$resid, na.rm = TRUE)),
+                color = "lightblue",
+                size = 1) +
+  labs(title = "Histogram of Residuals with Fitted Normal Curve",
+       x = "Residuals",
+       y = "Density")
+```
+
+The residual histogram lacks the bell shape expected under normality, and
+instead shows a bimodal distribution with two peaks and a trough around
+0. This suggests two distinct subgroups in the data. Given that males tend
+to have a higher BMI than females, sex is likely one of the key covariates
+missing from this model, and including it should improve model fit.
+
+## Extending the Model with Additional Covariates
+
+This model instead predicts body fat using age, BAI, body density, weight,
+height, and corrected BMI as predictors.
+
+```{r}
+lm_bodyfat_covariants <- lm(body_fat ~ age + bai + density + weight + height + Correct_bmi,
+                 data = cleaned_bmi_data)
+summary(lm_bodyfat_covariants)
+```
+
+The R² value of 0.9961 shows that 99.6% of the variation in body fat is
+explained by these six covariates — a very strong model fit. Based on the
+absolute t-values, which show how much each predictor contributes once
+accounting for its variance, **density** is by far the dominant predictor
+of body fat.
+
+```{r}
+plot(lm_bodyfat_covariants)
+```
+
+The Residuals vs Fitted plot shows points symmetrically distributed and
+clustering toward the middle, suggesting generally constant variance with
+no obvious pattern of non-linearity. Two outliers appear far from the
+bulk of the data and will have some influence on the model's estimates;
+however, since quality control has already been applied to the data, these
+likely represent natural variability in the population rather than data
+errors.
+
+The Q-Q plot further supports a normal distribution of residuals, which
+sit close to the expected quantiles, with only slight deviation at the
+positive and negative tails.
+
+```{r}
+residuals_df2 <- data.frame(resid = residuals(lm_bodyfat_covariants))
+
+ggplot(residuals_df2, aes(x = resid)) +
+  geom_histogram(aes(y = ..density..),
+                 bins = 30,
+                 fill = "darkblue",
+                 color = "black") +
+  stat_function(fun = dnorm,
+                args = list(mean = mean(residuals_df2$resid, na.rm = TRUE),
+                            sd = sd(residuals_df2$resid, na.rm = TRUE)),
+                color = "lightblue",
+                size = 1) +
+  labs(title = "Histogram of Residuals with Fitted Normal Curve",
+       x = "Residuals",
+       y = "Density")
+```
+
+The residuals histogram shows a close-to-normal distribution, following
+the fitted normal curve with clustering around the mean and median. This
+supports the R² value of 0.9961, confirming this as a strong model.
