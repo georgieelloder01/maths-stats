@@ -3,6 +3,15 @@ title: "Maths and Stats Coursework"
 author: "Georgina Adams"
 date: "07/11/25"
 output: "html_document"
+ html_document:
+    theme: flatly         
+    highlight: tango        
+    toc: true               
+    toc_float: true         
+    toc_depth: 3
+    code_folding: hide       
+    number_sections: true
+    df_print: paged 
 ---
 
 ```{r}
